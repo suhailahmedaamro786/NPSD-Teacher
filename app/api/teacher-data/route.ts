@@ -1,5 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-function adminClient(){const url=process.env.NEXT_PUBLIC_SUPABASE_URL;const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)throw new Error('Server Supabase configuration is missing');return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false}})}
-export async function GET(req:NextRequest){try{const db=adminClient();const token=req.headers.get('authorization')?.replace(/^Bearer\s+/i,'');if(!token)return NextResponse.json({error:'Authentication required'},{status:401});const {data:u,error:ue}=await db.auth.getUser(token);if(ue||!u.user)return NextResponse.json({error:'Invalid session'},{status:401});const {data:teacher,error:te}=await db.from('teachers').select('*').eq('user_id',u.user.id).eq('active',true).maybeSingle();if(te)return NextResponse.json({error:te.message},{status:500});if(!teacher)return NextResponse.json({error:'Teacher account is not approved or configured.'},{status:403});const {data:assignments,error:ae}=await db.from('teacher_class_assignments').select('id,class_id,subject_id,subject,classes(id,name,section,academic_year),subjects(id,name)').eq('teacher_id',teacher.id);if(ae)return NextResponse.json({error:ae.message},{status:500});const classIds=[...new Set((assignments||[]).map((x:any)=>x.class_id).filter(Boolean))];let students:any[]=[];if(classIds.length){const r=await db.from('students').select('id,student_id,full_name,father_name,active,class_id,classes(name,section)').in('class_id',classIds).eq('active',true).order('full_name');if(r.error)return NextResponse.json({error:r.error.message},{status:500});students=r.data||[]}const studentIds=students.map(x=>x.id);const [ar,er,rr,nr]=await Promise.all([studentIds.length?db.from('attendance').select('*').in('student_id',studentIds).order('attendance_date',{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),classIds.length?db.from('exams').select('id,name,exam_date,class_id,total_marks,published,classes(name,section)').in('class_id',classIds).order('exam_date',{ascending:false}).limit(100):Promise.resolve({data:[],error:null}),studentIds.length?db.from('results').select('id,student_id,exam_id,subject,marks_obtained,total_marks,obtained,total,grade,position,pass,published,students(student_id)').in('student_id',studentIds).order('id',{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),db.from('announcements').select('*').eq('published',true).order('published_at',{ascending:false}).limit(50)]);const firstError=[ar,er,rr,nr].find((x:any)=>x.error);if(firstError)return NextResponse.json({error:firstError.error.message},{status:500});return NextResponse.json({teacher,assignments:assignments||[],students,attendance:ar.data||[],exams:er.data||[],results:rr.data||[],announcements:nr.data||[]});}catch(e:any){return NextResponse.json({error:e?.message||'Server error'},{status:500})}}
+function adminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Server Supabase configuration is missing');
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const db = adminClient();
+    const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    if (!token) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const { data: u, error: ue } = await db.auth.getUser(token);
+    if (ue || !u.user) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    const { data: teacher, error: te } = await db.from('teachers').select('*').eq('user_id', u.user.id).eq('active', true).maybeSingle();
+    if (te) return NextResponse.json({ error: te.message }, { status: 500 });
+    if (!teacher) return NextResponse.json({ error: 'Teacher account is not approved or configured.' }, { status: 403 });
+    const { data: assignments, error: ae } = await db.from('teacher_class_assignments').select('id,class_id,subject_id,subject,classes(id,name,section,academic_year),subjects(id,name)').eq('teacher_id', teacher.id);
+    if (ae) return NextResponse.json({ error: ae.message }, { status: 500 });
+    const classIds = [...new Set((assignments || []).map((x: any) => x.class_id).filter(Boolean))];
+    let students: any[] = [];
+    if (classIds.length) {
+      const r = await db.from('students').select('id,student_id,full_name,father_name,active,class_id,classes(name,section)').in('class_id', classIds).eq('active', true).order('full_name');
+      if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 });
+      students = r.data || [];
+    }
+    const studentIds = students.map((x) => x.id);
+    const [ar, er, rr, nr] = await Promise.all([
+      studentIds.length ? db.from('attendance').select('*').in('student_id', studentIds).order('attendance_date', { ascending: false }).limit(500) : Promise.resolve({ data: [], error: null }),
+      classIds.length ? db.from('exams').select('id,name,exam_date,class_id,total_marks,published,classes(name,section)').in('class_id', classIds).order('exam_date', { ascending: false }).limit(100) : Promise.resolve({ data: [], error: null }),
+      studentIds.length ? db.from('results').select('id,student_id,exam_id,subject,marks_obtained,total_marks,obtained,total,grade,position,pass,published,students(student_id)').in('student_id', studentIds).order('id', { ascending: false }).limit(500) : Promise.resolve({ data: [], error: null }),
+      db.from('announcements').select('*').eq('published', true).order('published_at', { ascending: false }).limit(50),
+    ]);
+    const firstError = [ar, er, rr, nr].find((x: any) => x.error);
+    if (firstError?.error) return NextResponse.json({ error: firstError.error.message }, { status: 500 });
+    return NextResponse.json({ teacher, assignments: assignments || [], students, attendance: ar.data || [], exams: er.data || [], results: rr.data || [], announcements: nr.data || [] });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
+  }
+}
