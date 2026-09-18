@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const { data: teacher, error: te } = await db.from('teachers').select('*').eq('user_id', u.user.id).eq('active', true).maybeSingle();
     if (te) return NextResponse.json({ error: te.message }, { status: 500 });
     if (!teacher) return NextResponse.json({ error: 'Teacher account is not approved or configured.' }, { status: 403 });
-    const { data: assignments, error: ae } = await db.from('teacher_class_assignments').select('id,class_id,subject_id,subject,classes(id,name,section,academic_year),subjects(id,name)').eq('teacher_id', teacher.id);
+    const { data: assignments, error: ae } = await db.from('teacher_class_assignments').select('id,class_id,subject_id,subject,classes(id,name,section,academic_year)').eq('teacher_id', teacher.id);
     if (ae) return NextResponse.json({ error: ae.message }, { status: 500 });
     const classIds = [...new Set((assignments || []).map((x: any) => x.class_id).filter(Boolean))];
     let students: any[] = [];
